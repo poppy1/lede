@@ -10,11 +10,16 @@
 name: OpenWrt-CI
 
 on:
+# 定时触发
   schedule:
     - cron: 0 1 * * *
+
+# 编辑触发
    push:
       branches: 
         - master
+    
+# Release 发布触发
    release:
      types: [published]
 
