@@ -12,7 +12,7 @@ name: OpenWrt-CI
 on:
 # 定时触发
   schedule:
-    - cron: 0 1 * * *
+    - cron: "0 21 * * *"
 
 # 编辑触发
    push:
