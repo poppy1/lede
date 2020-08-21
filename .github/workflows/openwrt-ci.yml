@@ -1,245 +1,204 @@
-#=================================================
-# https://github.com/ClayMoreBoy/OpenWrt-Actions-R7800
-# Description: Build OpenWrt using GitHub Actions
-# Lisence: MIT
-# Author: ClayMoreBoy
-# Github: https://github.com/ClayMoreBoy
-#=================================================
+#
+# This is free software, lisence use MIT.
+# 
+# Copyright (C) 2019 P3TERX <https://p3terx.com>
+# Copyright (C) 2019 KFERMercer <KFER.Mercer@gmail.com>
+# 
+# <https://github.com/KFERMercer/OpenWrt-CI>
+#
 
-name: OpenWrt-R7800-Lean
+name: OpenWrt-CI
 
 on:
-# 定时触发
-  schedule:
-    - cron: 0 1 * * *
-
-# Release 发布触发
-#  release:
-#    types: [published]
-
-# 点赞触发
-#  watch:
-#    types: [started]
-
-# 编辑触发
-#  push:
-#    branches: 
-#       - master
-
-env:
-  # 源
-  REPO_URL: https://github.com/coolsnowwolf/lede
-  # 分支
-  REPO_BRANCH: master
-  # PassWall插件包
-  EX_PKG: true
-  # 脚本
-  DIY_SH: OpenWrt-R7800-Lean.sh
-  # 开启SSH连接
-  SSH_ACTIONS: false
-  # 上传分支
-  UPLOAD_BRANCH: true
-  # 分支
-  BRANCH: R7800-Lean
-  # Github 用户名
-  GITHUB_USER_NAME: ClayMoreBoy
-  # Github 邮箱
-  GITHUB_USER_EMAIL: ${{ secrets.EMAIL }}
-  # Github
-  GITHUB: github.com/ClayMoreBoy/OpenWrt-Actions-R7800.git
-  # 上传固件
-  UPLOAD_FIRMWARE: true
-  # 上传到奶牛快传
-  UPLOAD_COWTRANSFER: true
-  # 创建+上传发布
-  CREATE_RELEASE: true
-  # 编译者
-  BUILD_USER: ClayMoreBoy
-  # 微信通知
-  SEND_WECHAT_MSG: false
+  push:
+    branches: 
+      - master
+   schedule:
+     - cron: 0 20 * * *
+   release:
+     types: [published]
 
 jobs:
-  build:
-    if: github.event.repository.owner.id == github.event.sender.id
+
+  build_openwrt:
+
+    name: Build OpenWrt
     runs-on: ubuntu-latest
+    if: github.event.repository.owner.id == github.event.sender.id
 
     steps:
-    # 校验本地文件
-    - name: Checkout
-      uses: actions/checkout@main
 
-    # 初始化编译环境
-    - name: Initialization environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        docker rmi $(docker images -q)
-        sudo -E rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo -E apt-get remove -y --purge azure-cli ghc zulu* hhvm llvm* firefox google* dotnet* powershell mysql* php* mssql-tools msodbcsql17
-        sudo -E apt-get update -y
-        sudo -E apt-get full-upgrade -y
-        sudo -E apt-get install -y build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs git-core gcc-8 gcc++-8 gcc-8-multilib g++-8-multilib p7zip p7zip-full msmtp libssl-dev texinfo libreadline-dev libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint ccache curl wget vim nano python python3 python-pip python3-pip python-ply python3-ply haveged lrzsz device-tree-compiler scons antlr3 gperf ecj fastjar re2c
-        sudo -E ln -sf /usr/bin/gcc-8 /usr/bin/gcc
-        sudo -E ln -sf /usr/bin/g++-8 /usr/bin/g++
-        sudo -E ln -sf /usr/bin/gcc-ar-8 /usr/bin/gcc-ar
-        sudo -E ln -sf /usr/bin/gcc-nm-8 /usr/bin/gcc-nm
-        sudo -E ln -sf /usr/bin/gcc-ranlib-8 /usr/bin/gcc-ranlib
-        sudo -E apt-get autoremove -y --purge
-        sudo -E apt-get clean -y
-        sudo -E rm -rf /usr/share/dotnet /etc/mysql /etc/php
-    # 克隆源代码 By bobotoy
-    - name: Clone source code
-      run: |
-        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
-        cd openwrt
-        useVersionInfo=$(git show -s --date=short --format="Author: %an<br/>Date: %cd<br/>Commit: %s")
-        echo "::set-env name=useVersionInfo::$useVersionInfo"
-        echo "::set-env name=DATE::$(TZ=UTC-8 date "+%Y%m%d")"
-        echo "::set-env name=RELEASE_DATE::$(TZ=UTC-8 date "+%Y-%m-%d")"
-    # 增加 PassWall 插件源 By rohu168
-    - name: Update and install feeds passwall
-      if: env.EX_PKG == 'true'
-      run: |
-        chmod +x ssr-plus_passwall.sh && cp ssr-plus_passwall.sh ./openwrt && cd openwrt && ./ssr-plus_passwall.sh
-        
-    # 更新源 sed -i 's/\"#src-git\"/\"src-git\"/g' ./feeds.conf.default
-    - name: Update Feeds
-      if: env.REPO_URL != 'https://github.com/coolsnowwolf/lede'
-      working-directory: ./openwrt
-      run:  |
-        ./scripts/feeds clean
-        ./scripts/feeds update -a
-    # 安装源
-    - name: Install Feeds
-      if: env.REPO_URL != 'https://github.com/coolsnowwolf/lede'
-      working-directory: ./openwrt
-      run:  ./scripts/feeds install -a
+      - name: Checkout
+        uses: actions/checkout@master
+        with:
+          ref: master
 
-    # 加载自定义配置文件
-    - name: Load Custom Configuration
-      run: |
-        [ -e files ] && mv files openwrt/files
-        chmod +x $DIY_SH
-        cd openwrt
-        ../$DIY_SH
-        make defconfig
-    # SSH连接
-    - name: SSH connection to Actions
-      uses: P3TERX/debugger-action@master
-      if: env.SSH_ACTIONS == 'true'
+      - name: Space cleanup
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          docker rmi `docker images -q`
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d
+          sudo -E apt-get -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell openjdk* mysql* php*
+          sudo -E apt-get update
+          sudo -E apt-get -y install build-essential asciidoc binutils bzip2 gawk gettext git libncurses5-dev libz-dev patch python3 unzip zlib1g-dev lib32gcc1 libc6-dev-i386 subversion flex uglifyjs gcc-multilib g++-multilib p7zip p7zip-full msmtp libssl-dev texinfo libglib2.0-dev xmlto qemu-utils upx libelf-dev autoconf automake libtool autopoint device-tree-compiler antlr3 gperf
+          sudo -E apt-get -y autoremove --purge
+          sudo -E apt-get clean
+          # sudo mkdir -p -m 777 /mnt/openwrt/bin /mnt/openwrt/build_dir/host /mnt/openwrt/build_dir/hostpkg /mnt/openwrt/dl /mnt/openwrt/feeds /mnt/openwrt/staging_dir
+          # ln -s /mnt/openwrt/bin ./bin
+          # mkdir -p ./build_dir/host && ln -s /mnt/openwrt/build_dir/host ./build_dir/host
+          # mkdir -p ./build_dir/host && ln -s /mnt/openwrt/build_dir/hostpkg ./build_dir/hostpkg
+          # ln -s /mnt/openwrt/dl ./dl
+          # ln -s /mnt/openwrt/feeds ./feeds
+          # ln -s /mnt/openwrt/staging_dir ./staging_dir
+          df -h
+      - name: Update feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+      - name: Generate configuration file
+        run: |
+          rm -f ./.config*
+          touch ./.config
+          #
+          # ========================固件定制部分========================
+          # 
+          # 
+          # 如果不对本区块做出任何编辑, 则生成默认配置固件. 
+          # 
+          # 以下为定制化固件选项和说明:
+          #
+          #
+          # 有些插件/选项是默认开启的, 如果想要关闭, 请参照以下示例进行编写:
+          # 
+          #          =========================================
+          #         |  # 取消编译VMware镜像:                   |
+          #         |  cat >> .config <<EOF                   |
+          #         |  # CONFIG_VMDK_IMAGES is not set        |
+          #         |  EOF                                    |
+          #          =========================================
+          #
+          # 
+          # 以下是一些提前准备好的一些插件选项.
+          # 直接取消注释相应代码块即可应用. 不要取消注释代码块上的汉字说明.
+          # 如果不需要代码块里的某一项配置, 只需要删除相应行.
+          #
+          # 如果需要其他插件, 请按照示例自行添加.
+          # 注意, 只需添加依赖链顶端的包. 如果你需要插件 A, 同时 A 依赖 B, 即只需要添加 A.
+          # 
+          # 无论你想要对固件进行怎样的定制, 都需要且只需要修改 EOF 回环内的内容.
+          # 
+          # 编译x64固件:
+          # cat >> .config <<EOF
+          # CONFIG_TARGET_x86=y
+          # CONFIG_TARGET_x86_64=y
+          # CONFIG_TARGET_x86_64_Generic=y
+          # EOF
+          # 固件压缩:
+          # cat >> .config <<EOF
+          # CONFIG_TARGET_IMAGES_GZIP=y
+          # EOF
+          # 编译UEFI固件:
+          # cat >> .config <<EOF
+          # CONFIG_EFI_IMAGES=y
+          # EOF
+          # IPv6支持:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
+          # CONFIG_PACKAGE_ipv6helper=y
+          # EOF
+          # 多文件系统支持:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_kmod-fs-nfs=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-common=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-v3=y
+          # CONFIG_PACKAGE_kmod-fs-nfs-v4=y
+          # CONFIG_PACKAGE_kmod-fs-ntfs=y
+          # CONFIG_PACKAGE_kmod-fs-squashfs=y
+          # EOF
+          # USB3.0支持:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_kmod-usb-ohci=y
+          # CONFIG_PACKAGE_kmod-usb-ohci-pci=y
+          # CONFIG_PACKAGE_kmod-usb2=y
+          # CONFIG_PACKAGE_kmod-usb2-pci=y
+          # CONFIG_PACKAGE_kmod-usb3=y
+          # EOF
+          # 常用LuCI插件选择:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_luci-app-adbyby-plus=y
+          # CONFIG_PACKAGE_luci-app-aria2=y
+          # CONFIG_PACKAGE_luci-app-baidupcs-web=y
+          # CONFIG_PACKAGE_luci-app-docker=y
+          # CONFIG_PACKAGE_luci-app-frpc=y
+          # CONFIG_PACKAGE_luci-app-kodexplorer=y
+          # CONFIG_PACKAGE_luci-app-minidlna=y
+          # CONFIG_PACKAGE_luci-app-openvpn=y
+          # CONFIG_PACKAGE_luci-app-openvpn-server=y
+          # CONFIG_PACKAGE_luci-app-qbittorrent=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Kcptun=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ShadowsocksR_Server=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ShadowsocksR_Socks=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_V2ray=y
+          # CONFIG_PACKAGE_luci-app-ttyd=y
+          # CONFIG_PACKAGE_luci-app-v2ray-server=y
+          # CONFIG_PACKAGE_luci-app-verysync=y
+          # CONFIG_PACKAGE_luci-app-webadmin=y
+          # CONFIG_PACKAGE_luci-app-wireguard=y
+          # CONFIG_PACKAGE_luci-app-wrtbwmon=y
+          # EOF
+          # LuCI主题:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_luci-theme-argon=y
+          # CONFIG_PACKAGE_luci-theme-netgear=y
+          # EOF
+          # 常用软件包:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_curl=y
+          # CONFIG_PACKAGE_htop=y
+          # CONFIG_PACKAGE_nano=y
+          # CONFIG_PACKAGE_screen=y
+          # CONFIG_PACKAGE_tree=y
+          # CONFIG_PACKAGE_vim-fuller=y
+          # CONFIG_PACKAGE_wget=y
+          # EOF
+          # 取消编译VMware镜像以及镜像填充 (不要删除被缩进的注释符号):
+          # cat >> .config <<EOF
+          # # CONFIG_TARGET_IMAGES_PAD is not set
+          # # CONFIG_VMDK_IMAGES is not set
+          # EOF
+          # 
+          # ========================固件定制部分结束========================
+          # 
+          sed -i 's/^[ \t]*//g' ./.config
+          make defconfig
+      - name: Make download
+        run: |
+          make download -j8 || make download -j1 V=s
+          find ./dl/ -size -1024c -exec rm -f {} \;
+          df -h
+      - name: Compile firmware
+        run: |
+          make -j$(nproc) || make -j1 V=s
+          echo "======================="
+          echo "Space usage:"
+          echo "======================="
+          df -h
+          echo "======================="
+          du -h ./ --max-depth=1
+          du -h /mnt/openwrt/ --max-depth=1 || true
+      - name: Prepare artifact
+        run: find ./bin/targets/ -type d -name "packages" | xargs rm -rf {}
 
-    # 下载软件包
-    - name: Make Download
-      working-directory: ./openwrt
-      id: package
-      run: |
-        make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
-    
-    # 编译固件
-    - name: Compile Firmware
-      working-directory: ./openwrt
-      id: compile
-      run: |
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 V=s
-        echo "::set-output name=status::success"        
-    
-    # 上传到分支 By yfdoor
-    - name: Upload Branch
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BRANCH == 'true' && !cancelled() 
-      env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      run: |
-          cd openwrt/bin/targets/*/*
-          rm -rf *uImage
-          rm -rf *.manifest
-          rm -rf *.seed
-          rm -rf *.buildinfo
-          cd openwrt/bin
-          git init
-          git config user.name $GITHUB_USER_NAME
-          git config user.email $GITHUB_USER_EMAIL
-          git add .
-          git commit -m "Update OpenWrt_"$BRANCH
-          git push --force --quiet https://${{ secrets.RELEASE_TOKEN }}@$GITHUB HEAD:OpenWrt-$BRANCH
-    
-    # 整理文件
-    - name: Organize Files
-      id: organize
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-      run: |
-        mv openwrt/.config openwrt/bin/targets/*/*
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        rm -rf *uImage
-        rm -rf *.manifest
-        rm -rf *.seed
-        rm -rf *.buildinfo
-        echo "::set-env name=FIRMWARE::$PWD"
-        echo "::set-output name=status::success"
-    
-    # 上传固件
-    - name: Upload Firmware Directory
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && !cancelled()
-      with:
-        name: ${{ env.BUILD_USER }}-${{ env.DATE }}-OpenWrt-${{ env.BRANCH }}-Firmware
-        path: ${{ env.FIRMWARE }}
+      - name: Upload config.seed
+        uses: actions/upload-artifact@master
+        with:
+          name: config.seed
+          path: ./bin/targets/*/*/config.seed
 
-    # 上传固件到奶牛快传
-    - name: Upload Firmware To CowTransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer cow --block 2621440 -s -p 99 -t 3 --hash --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
-        echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
-        echo "::set-env name=COWTRANSFER_URL::$(cat cowtransfer.log | grep https | cut -f3 -d" ")"
-    
-    - name: Upload firmware to WeTransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
-        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
-        echo "::set-env name=WETRANSFER_URL::$(cat wetransfer.log | grep https | cut -f3 -d" ")"
-    # 生成标签
-    - name: Generate Tag
-      id: tag
-      if: steps.compile.outputs.status == 'success' && env.CREATE_RELEASE == 'true' && !cancelled()
-      run: |
-        echo ::set-env name=RELEASE_TAG::"$(TZ=UTC-8 date +"%Y-%m-%d")"
-        echo "::set-output name=status::success"
-    
-    # 发行固件
-    - name: Upload Firmware To Release
-      uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      with:
-        name: Netgear ${{ env.BRANCH }} 🚀 | 自动编译 / ${{ env.RELEASE_TAG }}
-        tag_name: ${{ env.RELEASE_DATE }}
-        body: |            
-            1、本固件为自动编译
-            2、发行版中只提供完整的固件
-            3、需要单独IPK请到分支下载
-            4、源码：${{ env.REPO_URL }}
-            -- Build by ${{ env.BUILD_USER }} @ with Github Action on ${{ env.RELEASE_DATE }}
-            🚀 Auto build | 自动编译
-            🔗 [Cowtransfer | 奶牛快传](${{ env.COWTRANSFER_URL }}) 
-            🔗 [WeTransfer](${{ env.WETRANSFER_URL }})       
-            当前使用版本:（编译前的最后一次大雕源码更新记录）            
-            ${{ env.useVersionInfo }}
-            ${{ github.event.commits[0].message }}
-        files: ${{ env.FIRMWARE }}/*
-
-    # 微信通知
-    - name: WeChat Notification
-      if: steps.compile.outputs.status == 'success' && env.SEND_WECHAT_MSG == 'true' && !cancelled()
-      uses: emon100/Action-Serverchan@master
-      with:
-        SCKEY: ${{ secrets.SCKEY }}
-        text: ${{ env.BRANCH }}固件编译完成！
-        desp: 源码:${{ env.REPO_URL }} 分支：${{ env.REPO_BRANCH }}
+      - name: Upload firmware
+        uses: actions/upload-artifact@master
+        with:
+          name: OpenWrt_firmware
+          path: ./bin/targets/
